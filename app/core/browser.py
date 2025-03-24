@@ -29,6 +29,7 @@ def initialize_browser():
         options.add_argument("--disable-infobars")
         options.add_argument("--disable-notifications")
         options.add_argument("--disable-popup-blocking")
+        options.add_argument("--enable-unsafe-swiftshader")
 
         # Identidade do navegador
         options.add_argument(f"--user-agent={BROWSER_USER_AGENT}")
