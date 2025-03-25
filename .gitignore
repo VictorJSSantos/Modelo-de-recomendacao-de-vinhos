@@ -1,6 +1,7 @@
 #My stuff
 data/evino_products.db
 data/evino_products2.db
+old/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
