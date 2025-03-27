@@ -1,0 +1,11 @@
+[runner]
+magic_mode = true
+
+[server]
+hideRerunButton = true
+
+[menu]
+hidePages = ["_Results", "_Details"]
+
+[theme]
+base="dark"

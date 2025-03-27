@@ -1,12 +1,17 @@
+import streamlit as st
+
+st.set_page_config(initial_sidebar_state="collapsed")
+
 import sys
 import datetime
-from app.core.browser import initialize_browser, close_browser
-from app.core.scraper import scrape_product_links
-from app.core.downloader import download_product_html
-from app.database.supabase_client import get_supabase_client
-from app.scheduler.tasks import schedule_download_tasks
-from app.utils.helpers import setup_logging, get_user_input, get_integer_input
-from app.config.settings import PRODUCTS_BATCH_SIZE, DOWNLOAD_INTERVAL
+
+
+from backend.app.core.browser import initialize_browser, close_browser
+from backend.app.database.supabase_client import scrape_product_links
+from backend.app.database.supabase_client import get_supabase_client
+from backend.app.scheduler.tasks import schedule_download_tasks
+from backend.app.utils.helpers import setup_logging, get_user_input, get_integer_input
+from backend.app.config.settings import PRODUCTS_BATCH_SIZE, DOWNLOAD_INTERVAL
 
 
 def main():
@@ -48,9 +53,6 @@ def main():
                 logger.info("Extração de links concluída")
             except Exception as e:
                 logger.error(f"Erro durante a extração inicial: {e}")
-            finally:
-                # Fecha o navegador
-                close_browser(driver)
         else:
             logger.error(
                 "Não foi possível inicializar o navegador. Verifique se o Chrome está instalado."
@@ -59,7 +61,7 @@ def main():
 
         # Primeira execução do download
         logger.info("Iniciando primeiro download de produtos")
-        download_product_html(supabase, PRODUCTS_BATCH_SIZE)
+        # download_product_html(supabase, PRODUCTS_BATCH_SIZE)
 
     # Configura o intervalo e o tamanho do lote
     interval = get_integer_input(
