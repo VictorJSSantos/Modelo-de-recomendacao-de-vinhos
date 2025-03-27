@@ -27,7 +27,7 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 st.title("🍷 Vinhos Recomendados ")
 
-db = pd.read_csv("db.csv")
+db = pd.read_csv("./data/db.csv")
 recommender = WineRecommender(db)
 
 recomendacoes = recommender.recommend_wines(
