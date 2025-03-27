@@ -1,29 +1,32 @@
-import streamlit as st
-
-st.set_page_config(initial_sidebar_state="collapsed")
-
 import sys
 import datetime
+from bs4 import BeautifulSoup
 
-
-from backend.app.core.browser import initialize_browser, close_browser
-from backend.app.database.supabase_client import scrape_product_links
-from backend.app.database.supabase_client import get_supabase_client
-from backend.app.scheduler.tasks import schedule_download_tasks
-from backend.app.utils.helpers import setup_logging, get_user_input, get_integer_input
-from backend.app.config.settings import PRODUCTS_BATCH_SIZE, DOWNLOAD_INTERVAL
+from app.config.settings import EVINO_PRODUCTS_URL, EVINO_BASE_URL
+from app.core.browser import initialize_browser, close_browser
+from app.core.scraper_aux import extract_product_links, scroll_page
+from app.core.scraper import scrape_wine_info_with_selenium
+from app.database.supabase_client import (
+    get_supabase_client,
+    save_links_to_supabase,
+    process_and_upsert_wine_data,
+    process_product_links,
+    get_pending_products,
+)
+from app.utils.helpers import setup_logging, get_user_input, get_integer_input
+from app.scheduler.tasks import *
 
 
 def main():
     """
-    Função principal do programa.
+    Main function to orchestrate the Evino wine scraping process.
     """
     logger = setup_logging()
-    logger.info("===== Iniciando extrator de produtos da Evino com Supabase =====")
+    logger.info("===== Iniciando extrator de vinhos da Evino com Supabase =====")
     logger.info(f"Data/Hora: {datetime.datetime.now()}")
 
     try:
-        # Inicializa o cliente do Supabase
+        # Initialize Supabase client
         supabase = get_supabase_client()
         logger.info("Conexão com Supabase estabelecida com sucesso")
     except ValueError as e:
@@ -36,49 +39,88 @@ def main():
         logger.error(f"Erro ao conectar com Supabase: {e}")
         sys.exit(1)
 
-    # Pergunta se deve executar a extração inicial
+    # Ask if initial extraction should be performed
     should_extract = get_user_input(
-        "Deseja executar a extração inicial de links? (s/n): ", valid_options=["s", "n"]
+        "Deseja executar a extração inicial de links de vinhos? (s/n): ",
+        valid_options=["s", "n"],
     )
+    new_links_count = None
+
+    # Initialize browser
+    driver = initialize_browser()
 
     if should_extract == "s":
-        # Inicializa o navegador
-        driver = initialize_browser()
 
         if driver:
             try:
-                # Extrai links de produtos
+                # Navigate to products page and get page source
+                driver.get(EVINO_PRODUCTS_URL)
+                scroll_page(driver)  # Scroll to load more products
+                page_source = driver.page_source
+                soup = BeautifulSoup(page_source, "html.parser")
+
                 logger.info("Iniciando extração de links de produtos")
-                scrape_product_links(driver, supabase)
-                logger.info("Extração de links concluída")
+                product_links = extract_product_links(soup)
+
+                if not product_links:
+                    logger.warning("Nenhum link de produto encontrado")
+                    return None  # Ou return, dependendo do contexto
+
+                logger.info(
+                    f"Total de {len(product_links)} links de produtos encontrados"
+                )
+
+                # Salvar links no Supabase
+                new_links_count = save_links_to_supabase(supabase, product_links)
+                logger.info(f"Novos links salvos: {new_links_count}")
+
             except Exception as e:
                 logger.error(f"Erro durante a extração inicial: {e}")
+            # finally:
+            #     # Close the browser
+            #     close_browser(driver)
         else:
             logger.error(
                 "Não foi possível inicializar o navegador. Verifique se o Chrome está instalado."
             )
-            sys.exit(1)
+            new_links_count = None
 
-        # Primeira execução do download
-        logger.info("Iniciando primeiro download de produtos")
-        # download_product_html(supabase, PRODUCTS_BATCH_SIZE)
-
-    # Configura o intervalo e o tamanho do lote
-    interval = get_integer_input(
-        f"Digite o intervalo em minutos entre os downloads (recomendado: {DOWNLOAD_INTERVAL}): ",
-        min_value=1,
-        default=DOWNLOAD_INTERVAL,
+    # Option to schedule future extractions
+    schedule_extraction = get_user_input(
+        "Deseja agendar extrações futuras? (s/n): ", valid_options=["s", "n"]
     )
 
-    batch = get_integer_input(
-        f"Digite quantos produtos baixar por vez (recomendado: {PRODUCTS_BATCH_SIZE}): ",
-        min_value=1,
-        default=PRODUCTS_BATCH_SIZE,
-    )
+    if schedule_extraction == "s":
+        interval = get_integer_input(
+            "Digite o intervalo em minutos entre as extrações: ",
+            min_value=0,
+            default=30,
+        )
 
-    # Inicia o agendador
-    logger.info("\nIniciando agendador de downloads...")
-    schedule_download_tasks(supabase, interval_minutes=interval, batch_size=batch)
+        batch_size = get_integer_input(
+            "Digite o tamanho do batch das extrações: ",
+            min_value=1,
+            default=30,
+        )
+
+        logger.info(
+            f"\nAgendamento de extrações a cada {interval} minutos  para a retirada de {batch_size} produtos."
+        )
+
+        # schedule_download_tasks(
+        #     supabase, interval_minutes=interval, batch_size=batch_size
+        # )
+        if new_links_count:
+            pending_product_urls = get_pending_products(supabase, limit=new_links_count)
+        else:
+            pending_product_urls = get_pending_products(supabase, limit=10)
+
+        ########################################################################
+        ########## Faltou só implementar a lógica de ciclos do scirpt  #########
+        ########## run_extraction, porém já está funcional todo o main #########
+        ########################################################################
+
+        process_and_upsert_wine_data(driver, pending_product_urls)
 
 
 if __name__ == "__main__":
