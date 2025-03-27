@@ -118,7 +118,7 @@ def main():
         ########################################################################
         ########## Faltou só implementar a lógica de ciclos do scirpt  #########
         ########## run_extraction, porém já está funcional todo o main #########
-        ########################################################################
+        #########################################################################
 
         process_and_upsert_wine_data(driver, pending_product_urls)
 
