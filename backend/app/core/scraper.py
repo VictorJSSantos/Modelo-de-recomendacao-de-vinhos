@@ -1,5 +1,6 @@
 import time
 from bs4 import BeautifulSoup
+import logging
 import re
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -25,6 +26,7 @@ from backend.app.scheduler.tasks import *
 
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+logger = logging.getLogger("evino_scraper")
 
 
 def scrape_wine_info_with_selenium(driver, url=EVINO_BASE_URL):
@@ -39,7 +41,7 @@ def scrape_wine_info_with_selenium(driver, url=EVINO_BASE_URL):
     Returns:
         dict: Extracted wine data
     """
-    print(f"Navegando para: {url}")
+    logger.info(f"Navegando para: {url}")
 
     try:
 
@@ -165,7 +167,7 @@ def scrape_wine_info_with_selenium(driver, url=EVINO_BASE_URL):
             wine_data["tannin_tasting"] = get_strength_level(driver, "Tanino")
 
         except Exception as e:
-            print(f"Erro ao extrair dados de força do vinho: {str(e)}")
+            logger.error(f"Erro ao extrair dados de força do vinho: {str(e)}")
 
         # Extract technical specifications
         try:
@@ -241,18 +243,24 @@ def scrape_wine_info_with_selenium(driver, url=EVINO_BASE_URL):
                 if specialist_review_content_elem and specialist_review_content:
                     wine_data["specialist_review_content"] = specialist_review_content
 
-                baixar_imagem(driver, url, wine_data["product_name"])
-
             finally:
                 pass
 
         except Exception as e:
-            print(f"Erro ao extrair especificações técnicas: {str(e)}")
+            logger.error(f"Erro ao extrair especificações técnicas: {str(e)}")
+
+        logger.info("Vamos tentar baixar a imagem: \n\n")
+        src, product_name_escaped = baixar_imagem(
+            driver, url, wine_data["product_name"]
+        )
+        wine_data["url"] = src
+        if not src:
+            logger.info(f"Erro ao processar o salvamento da foto.")
 
         return wine_data
 
     except Exception as e:
-        print(
+        logger.error(
             f"Erro ao processar página {url}: TESTE AQUI DA FUNCAO SCRAPER.PY"
         )  # {str(e)}
         return None

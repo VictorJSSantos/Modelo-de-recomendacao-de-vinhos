@@ -1,4 +1,5 @@
 import datetime
+import logging
 from supabase import create_client, Client
 
 
@@ -7,7 +8,8 @@ from backend.app.core.scraper_aux import *
 from backend.app.core.scraper import *
 from backend.app.utils.helpers import *
 
-# logger = setup_logging()
+
+logger = logging.getLogger("evino_scraper")
 
 
 def get_supabase_client() -> Client:
@@ -73,7 +75,7 @@ def insert_product_url(supabase: Client, url: str) -> bool:
         result = supabase.table("scrape_db").insert(data).execute()
         return len(result.data) > 0
     except Exception as e:
-        print(f"Erro ao inserir URL {url}: {e}")
+        logger.info(f"Erro ao inserir URL {url}: {e}")
         return False
 
 
@@ -109,13 +111,7 @@ def get_pending_products(supabase: Client, limit: int = 10) -> list:
         .limit(limit)
         .execute()
     )
-    # print(result)
     return result.data
-
-
-##############################################################
-# Essa é a única funcao qeu acho que vou ter que tirar!!!!!!
-##############################################################
 
 
 def update_product_html(supabase: Client, product_id: int, html_content: str) -> bool:
@@ -146,7 +142,7 @@ def update_product_html(supabase: Client, product_id: int, html_content: str) ->
         )
         return len(result.data) > 0
     except Exception as e:
-        print(f"Erro ao atualizar produto {product_id}: {e}")
+        logger.error(f"Erro ao atualizar produto {product_id}: {e}")
         return False
 
 
@@ -190,10 +186,6 @@ def check_pending_products(supabase: Client) -> int:
     return len(result.data)
 
 
-####################################################
-#### ADICIONANDO ###################################
-
-
 def scrape_product_links(driver, supabase: Client):
     """
     Extrai links de produtos da página da Evino.
@@ -206,21 +198,21 @@ def scrape_product_links(driver, supabase: Client):
         int: Número de novos links adicionados.
     """
     if not driver:
-        print("Erro: O navegador não foi inicializado corretamente")
+        logger.error("Erro: O navegador não foi inicializado corretamente")
         return 0
 
     try:
-        print(f"Acessando página de vinhos: {EVINO_PRODUCTS_URL}")
+        logger.info(f"Acessando página de vinhos: {EVINO_PRODUCTS_URL}")
         driver.get(EVINO_PRODUCTS_URL)
-        print("Página carregada")
+        logger.info("Página carregada")
 
-        time.sleep(5)  # Aguarda carregamento inicial
+        time.sleep(5)
 
         # Scroll para carregar mais produtos
         scroll_page(driver)
 
         # Extrai links de produtos
-        print("Extraindo links de produtos...")
+        logger.info("Extraindo links de produtos...")
         soup = BeautifulSoup(driver.page_source, "html.parser")
 
         # Encontra todos os links de produtos
@@ -228,13 +220,13 @@ def scrape_product_links(driver, supabase: Client):
 
         # Remove duplicados
         unique_links = list(set(links))
-        print(f"Total de links únicos encontrados: {len(unique_links)}")
+        logger.info(f"Total de links únicos encontrados: {len(unique_links)}")
 
         # Salva os links no Supabase
         return save_links_to_supabase(supabase, unique_links)
 
     except Exception as e:
-        print(f"Erro durante a extração de links: {e}")
+        logger.error(f"Erro durante a extração de links: {e}")
         return 0
 
 
@@ -263,7 +255,7 @@ def save_links_to_supabase(supabase, links):
             if insert_product_url(supabase, full_url):
                 count += 1
 
-    print(f"{count} novos links salvos no Supabase")
+    logger.info(f"{count} novos links salvos no Supabase")
     return count
 
 
@@ -289,7 +281,7 @@ def extract_urls_from_database(limit=20):
         return urls
 
     except Exception as e:
-        print(f"Erro ao buscar URLs: {str(e)}")
+        logger.error(f"Erro ao buscar URLs: {str(e)}")
         return []
 
 
@@ -322,12 +314,14 @@ def process_and_upsert_wine_data(driver, url, id):
             )
 
             if result.data and update_scraped.data:
-                print(f"Dados do vinho de ID {id} inseridos/atualizados com sucesso")
+                logger.info(
+                    f"Dados do vinho de ID {id} inseridos/atualizados com sucesso"
+                )
                 processed_count += 1
                 return processed_count
 
     except KeyboardInterrupt as e:
-        print(f"Programa encerrado pelo usuário.")
+        logger.info(f"Programa encerrado pelo usuário.")
         sys.exit(1)
 
     except Exception as e:
@@ -335,25 +329,10 @@ def process_and_upsert_wine_data(driver, url, id):
             supabase.table("scrape_db").update({"scraped": -1}).eq("id", id).execute()
         )
         if update_scraped.data:
-            print(
-                f"TEM QUE TER | Não vamos tentar scrapera o ID {id}. Scraped setado em -1."
+            logger.error(
+                f"Erro ao processar o ID {id}, não é possível fazer o scraping. Scraped setado em -1."
             )
             not_processed_count -= 1
             return not_processed_count
-
-    # except Exception as e:
-    # print(f"PUWD - process and | Erro ao processar URL {url}: {str(e)}")
-
-    # except:
-    #     update_scraped = (
-    #         supabase.table("scrape_db").update({"scraped": -1}).eq("id", id).execute()
-    #     )
-    #     if update_scraped.data:
-    #         print(
-    #             f"Falha ao atualizar dados do vinho de ID. Não vamos tentar scrapera o ID {id}. Scraped setado em -1."
-    #         )
-    #         processed_count += 1
-    #     else:
-    #         print(f"Não foi possível colocar o item de {id} com scraped -1.")
 
     return processed_count
