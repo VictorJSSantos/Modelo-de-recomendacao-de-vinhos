@@ -1,5 +1,6 @@
 import time
 import datetime
+import logging
 import schedule
 from supabase import Client
 import sys
@@ -10,7 +11,10 @@ from backend.app.database.supabase_client import (
     extract_urls_from_database,
     process_and_upsert_wine_data,
 )
+from backend.app.utils.helpers import *
 from backend.app.core.scraper_aux import *
+
+logger = logging.getLogger("evino_scraper")
 
 
 def schedule_download_tasks(
@@ -32,7 +36,7 @@ def schedule_download_tasks(
         batch_size (int): Quantidade de produtos a baixar por batch.
         max_batches (int): Número máximo de batches a processar.
     """
-    print(
+    logger.info(
         f"Agendando downloads a cada {interval_minutes} minutos, {batch_size} produtos por vez num total de {max_batches} rodadas"
     )
 
@@ -50,8 +54,8 @@ def schedule_download_tasks(
         """Processa um lote de produtos."""
         # Verificar se atingimos o limite de batches
         if batch_counter[0] >= max_batches:
-            print(f"Limite de {max_batches} batches atingido. Finalizando.")
-            print(
+            logger.info(f"Limite de {max_batches} batches atingido. Finalizando.")
+            logger.info(
                 f"""Processamento concluído. 
                 \nTotal de itens processados com sucesso: {total_processed[0]}
                 \nTotal de itens com falha: {total_not_processed[0]}"""
@@ -64,19 +68,23 @@ def schedule_download_tasks(
 
         # Verificar se ainda há produtos para processar
         if start_idx >= len(product_pairs):
-            print("Todos os produtos foram processados.")
+            logger.info("Todos os produtos foram processados.")
             return schedule.CancelJob
 
         # Processar este batch
-        print(f"\n---- Processando batch {batch_counter[0] + 1}/{max_batches} ----")
-        # print(f"Processando produtos {start_idx + 1} até {end_idx} de {len(product_pairs)}")
+        logger.info(
+            f"\n---- Processando batch {batch_counter[0] + 1}/{max_batches} ----"
+        )
+        # logger.info(f"Processando produtos {start_idx + 1} até {end_idx} de {len(product_pairs)}")
 
         batch_processed = 0
         batch_failed = 0
 
         for i in range(start_idx, end_idx):
             current_id, current_url = product_pairs[i]
-            print(f"Processando produto {i + 1}/{len(product_pairs)}: ID {current_id}")
+            logger.info(
+                f"Processando produto {i + 1}/{len(product_pairs)}: ID {current_id}"
+            )
 
             # Executar a extração para este produto
             try:
@@ -90,12 +98,12 @@ def schedule_download_tasks(
                     batch_failed += 1
                     total_not_processed[0] += 1
             except Exception as e:
-                print(f"Erro ao processar produto {current_id}: {str(e)}")
+                logger.error(f"Erro ao processar produto {current_id}: {str(e)}")
                 batch_failed += 1
                 total_not_processed[0] += 1
 
         # Relatório deste batch
-        print(
+        logger.info(
             f"""Batch {batch_counter[0] + 1} concluído.
             Produtos processados neste batch: {batch_processed}
             Produtos com falha neste batch: {batch_failed}
@@ -108,7 +116,7 @@ def schedule_download_tasks(
 
         # Verificar se é o último batch
         if batch_counter[0] >= max_batches or end_idx >= len(product_pairs):
-            print("Processamento completo. Cancelando agendamento.")
+            logger.info("Processamento completo. Cancelando agendamento.")
             return schedule.CancelJob
 
     process_batch()
@@ -128,14 +136,14 @@ def schedule_download_tasks(
                 time.sleep(1)  # Verificar a cada segundo se há tarefas pendentes
 
                 if check_pending_products(supabase) == 0:
-                    print("Não há mais produtos pendentes no banco de dados.")
+                    logger.info("Não há mais produtos pendentes no banco de dados.")
                     break
 
             except KeyboardInterrupt:
-                print("Programa interrompido pelo usuário.")
+                logger.info("Programa interrompido pelo usuário.")
                 break
             except Exception as e:
-                print(f"Erro no loop principal: {e}")
+                logger.error(f"Erro no loop principal: {e}")
                 time.sleep(60)  # Continua mesmo com erros após uma pausa
 
     return total_processed[0], total_not_processed[0]
@@ -153,20 +161,20 @@ def run_extraction(driver, url, id):
     Returns:
         int: Status do processamento (>= 0 para sucesso, < 0 para falha)
     """
-    print(f"Iniciando extração para o produto ID {id}...")
+    logger.info(f"Iniciando extração para o produto ID {id}...")
 
     if not driver:
-        print("Falha ao inicializar o navegador. Abortando.")
+        logger.error("Falha ao inicializar o navegador. Abortando.")
         return -1
 
     try:
         if not url:
-            print("URL inválida.")
+            logger.error("URL inválida.")
             return -1
 
         # Processar URL única
         return process_and_upsert_wine_data(driver, url, id)
 
     except Exception as e:
-        print(f"\nErro durante a extração: {str(e)}\n")
+        logger.error(f"\nErro durante a extração: {str(e)}\n")
         return -1

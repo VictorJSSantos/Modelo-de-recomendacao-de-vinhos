@@ -1,6 +1,8 @@
-import sys
-import datetime
 from bs4 import BeautifulSoup
+import datetime
+import logging
+import sys
+
 
 from app.config.settings import EVINO_PRODUCTS_URL, EVINO_BASE_URL
 from app.core.browser import initialize_browser, close_browser
@@ -97,13 +99,13 @@ def main():
         )
 
         batch_size = get_integer_input(
-            "Digite o tamanho do batch das extrações: ",
+            "Digite o tamanho do lote (batch) das extrações: ",
             min_value=1,
             default=30,
         )
 
         max_batches = get_integer_input(
-            "Digite o tamanho do batch das extrações: ",
+            "Digite quantos ciclos (batches) de extrações quer fazer: ",
             min_value=1,
             default=1,
             max_value=10,
@@ -119,12 +121,6 @@ def main():
             pending_product_data = get_pending_products(
                 supabase, limit=batch_size * max_batches
             )
-
-        # pending_product_urls = [i["url"] for i in pending_product_data]
-        # pending_product_ids = [i["id"] for i in pending_product_data]
-
-        # print(f'\URLS: {pending_product_urls}\n')
-        # print(f'\nIDS: {pending_product_ids}\n')
 
         schedule_download_tasks(
             driver,

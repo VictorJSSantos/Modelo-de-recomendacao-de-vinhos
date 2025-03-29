@@ -92,8 +92,9 @@ def escape_caractere_product_name(product_name):
     if product_name:
         caracteres_proibidos = ["<", ">", ":", '"', "/", "\\", "|", "?", "*"]
         caractere_substituto = "_"
+        pattern = "[" + re.escape("".join(caracteres_proibidos)) + "]"
         product_name_escaped = re.sub(
-            caracteres_proibidos,
+            pattern,
             caractere_substituto,
             product_name,
         )
@@ -113,42 +114,31 @@ def baixar_imagem(driver, url, product_name):
     )
 
     try:
-        # Acessar a URL
         driver.get(url)
         print(f"Página carregada: {url}")
-
-        # Dar tempo para a página carregar
         time.sleep(3)
 
         # Encontrar elementos picture
-        picture_elements = driver.find_elements(By.TAG_NAME, "picture")
+        picture_elements = driver.find_elements(
+            By.CSS_SELECTOR, ".NewProductImage.NewProductImage--loaded"
+        )
         print(f"Encontrados {len(picture_elements)} elementos picture")
 
         for i, picture in enumerate(picture_elements):
-            # Primeiro tenta obter a imagem principal (img)
             try:
                 img = picture.find_element(By.TAG_NAME, "img")
                 src = img.get_attribute("src")
 
                 if src and src.startswith("//"):
-                    src = "https:" + src
+                    src = "https:" + src + ".jpg"
 
-                nome_arquivo = f"{id}.jpg"
-
-                caracteres_proibidos = ["<", ">", ":", '"', "/", "\\", "|", "?", "*"]
-                caractere_substituto = "_"
-                product_name_escaped = re.sub(
-                    caracteres_proibidos,
-                    caractere_substituto,
-                    product_name,
-                )
-                nome_arquivo = f"{product_name_escaped}.jpg"
+                nome_arquivo = f"{product_name_escaped}"
                 caminho_completo = os.path.join(dest_path, nome_arquivo)
                 if src:
                     resposta = requests.get(src)
                     with open(caminho_completo, "wb") as f:
                         f.write(resposta.content)
-                    print(f"Imagem salva como {nome_arquivo}")
+
                     return src, product_name_escaped
             except Exception as e:
                 print(f"Erro ao processar imagem {i+1}: {e}")
