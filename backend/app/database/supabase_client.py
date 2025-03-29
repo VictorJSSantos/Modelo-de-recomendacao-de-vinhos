@@ -100,7 +100,7 @@ def get_pending_products(supabase: Client, limit: int = 10) -> list:
         limit (int): Número máximo de produtos a retornar.
 
     Returns:
-        list: Lista de produtos pendentes.
+        List[Dic]: Lista de dicionarios de produtos pendentes, cada dicionário tem o formato {"id":int, "url":str}.
     """
     result = (
         supabase.table("scrape_db")
@@ -109,6 +109,7 @@ def get_pending_products(supabase: Client, limit: int = 10) -> list:
         .limit(limit)
         .execute()
     )
+    # print(result)
     return result.data
 
 
@@ -292,47 +293,67 @@ def extract_urls_from_database(limit=20):
         return []
 
 
-def process_and_upsert_wine_data(driver, urls):
+def process_and_upsert_wine_data(driver, url, id):
     """
     Processes URLs and upserts the extracted data to the wine_data table
 
     Args:
         driver (webdriver.Chrome): Initialized Selenium webdriver
-        urls (list): List of URL tuples (id, url) to process
+        url (list): Url to process
+        id (int): Register ID on Supabase table
 
     Returns:
         int: Number of successfully processed URLs
     """
     processed_count = 0
+    not_processed_count = 0
 
-    for url in urls:
-        url_id = url.get("id", None)
-        url_link = url.get("url", None)
-        try:
-            wine_data = scrape_wine_info_with_selenium(driver, url_link)
+    try:
+        wine_data = scrape_wine_info_with_selenium(driver, url)
 
-            if wine_data:
-                wine_data["id"] = url_id
-                result = supabase.table("wine_data").upsert(wine_data).execute()
-                update_scraped = (
-                    supabase.table("scrape_db")
-                    .update({"scraped": 1})
-                    .eq("id", url_id)
-                    .execute()
-                )
+        if wine_data:
+            wine_data["id"] = id
+            result = supabase.table("wine_data").upsert(wine_data).execute()
+            update_scraped = (
+                supabase.table("scrape_db")
+                .update({"scraped": 1})
+                .eq("id", id)
+                .execute()
+            )
 
-                if result.data and update_scraped.data:
-                    print(
-                        f"Dados do vinho de ID {url_id} inseridos/atualizados com sucesso"
-                    )
-                    processed_count += 1
+            if result.data and update_scraped.data:
+                print(f"Dados do vinho de ID {id} inseridos/atualizados com sucesso")
+                processed_count += 1
+                return processed_count
 
-                else:
-                    print(f"Falha ao inserir/atualizar dados do vinho de ID {url_id}")
+    except KeyboardInterrupt as e:
+        print(f"Programa encerrado pelo usuário.")
+        sys.exit(1)
 
-            time.sleep(2)
+    except Exception as e:
+        update_scraped = (
+            supabase.table("scrape_db").update({"scraped": -1}).eq("id", id).execute()
+        )
+        if update_scraped.data:
+            print(
+                f"TEM QUE TER | Não vamos tentar scrapera o ID {id}. Scraped setado em -1."
+            )
+            not_processed_count -= 1
+            return not_processed_count
 
-        except Exception as e:
-            print(f"Erro ao processar URL {url_link}: {str(e)}")
+    # except Exception as e:
+    # print(f"PUWD - process and | Erro ao processar URL {url}: {str(e)}")
+
+    # except:
+    #     update_scraped = (
+    #         supabase.table("scrape_db").update({"scraped": -1}).eq("id", id).execute()
+    #     )
+    #     if update_scraped.data:
+    #         print(
+    #             f"Falha ao atualizar dados do vinho de ID. Não vamos tentar scrapera o ID {id}. Scraped setado em -1."
+    #         )
+    #         processed_count += 1
+    #     else:
+    #         print(f"Não foi possível colocar o item de {id} com scraped -1.")
 
     return processed_count

@@ -2,7 +2,7 @@ import time
 import datetime
 import schedule
 from supabase import Client
-
+import sys
 
 from backend.app.core.browser import initialize_browser, close_browser
 from backend.app.database.supabase_client import (
@@ -14,115 +14,159 @@ from backend.app.core.scraper_aux import *
 
 
 def schedule_download_tasks(
-    supabase: Client, interval_minutes=30, batch_size=10, max_batches=None
+    driver,
+    supabase: Client,
+    product_data,
+    interval_minutes=30,
+    batch_size=10,
+    max_batches=1,
 ):
     """
-    Agenda e executa tarefas de download de produtos.
+    Agenda e executa tarefas de download de produtos em lotes.
 
     Args:
+        driver (webdriver.Chrome): Initialized Selenium webdriver
         supabase (Client): Cliente do Supabase.
-        interval_minutes (int): Intervalo entre downloads em minutos.
-        batch_size (int): Quantidade de produtos a baixar por vez.
+        product_data (list): Lista de produtos com 'id' e 'url'
+        interval_minutes (int): Intervalo entre batches em minutos.
+        batch_size (int): Quantidade de produtos a baixar por batch.
+        max_batches (int): Número máximo de batches a processar.
     """
     print(
-        f"Agendando downloads a cada {interval_minutes} minutos, {batch_size} produtos por vez num total de {max_batches}"
+        f"Agendando downloads a cada {interval_minutes} minutos, {batch_size} produtos por vez num total de {max_batches} rodadas"
     )
 
-    # Função para executar o download com o batch_size definido
-    def scheduled_download():
-        run_extraction(supabase, batch_size)
+    # Preparar os dados dos produtos
+    urls = [item["url"] for item in product_data]
+    ids = [item["id"] for item in product_data]
+    product_pairs = list(zip(ids, urls))
 
-    # Agenda o download para executar a cada X minutos
-    schedule.every(interval_minutes).minutes.do(scheduled_download)
+    # Variáveis para controle global
+    batch_counter = [0]  # Contador de batches executados
+    total_processed = [0]  # Total de produtos processados com sucesso
+    total_not_processed = [0]  # Total de produtos com erro
 
-    # Executa também imediatamente após a configuração
-    scheduled_download()
+    def process_batch():
+        """Processa um lote de produtos."""
+        # Verificar se atingimos o limite de batches
+        if batch_counter[0] >= max_batches:
+            print(f"Limite de {max_batches} batches atingido. Finalizando.")
+            print(
+                f"""Processamento concluído. 
+                \nTotal de itens processados com sucesso: {total_processed[0]}
+                \nTotal de itens com falha: {total_not_processed[0]}"""
+            )
+            return schedule.CancelJob
 
-    # Loop principal para manter o programa rodando
-    run_scheduler_loop(supabase)
+        # Calcular o índice inicial e final para este batch
+        start_idx = batch_counter[0] * batch_size
+        end_idx = min(start_idx + batch_size, len(product_pairs))
 
+        # Verificar se ainda há produtos para processar
+        if start_idx >= len(product_pairs):
+            print("Todos os produtos foram processados.")
+            return schedule.CancelJob
 
-def run_scheduler_loop(supabase: Client):
-    """
-    Executa o loop principal do agendador, verificando e executando tarefas agendadas.
+        # Processar este batch
+        print(f"\n---- Processando batch {batch_counter[0] + 1}/{max_batches} ----")
+        # print(f"Processando produtos {start_idx + 1} até {end_idx} de {len(product_pairs)}")
 
-    Args:
-        supabase (Client): Cliente do Supabase.
-    """
-    while True:
-        try:
-            # Verifica se há tarefas agendadas para executar
-            schedule.run_pending()
-            time.sleep(60)  # Pausa por 60 segundos antes de verificar novamente
+        batch_processed = 0
+        batch_failed = 0
 
-            # Verifica se todos os produtos foram baixados
-            pending = check_pending_products(supabase)
+        for i in range(start_idx, end_idx):
+            current_id, current_url = product_pairs[i]
+            print(f"Processando produto {i + 1}/{len(product_pairs)}: ID {current_id}")
 
-            if pending == 0:
-                print(
-                    f"{datetime.datetime.now()}: Todos os produtos foram baixados. Encerrando o programa."
+            # Executar a extração para este produto
+            try:
+                processed = process_and_upsert_wine_data(
+                    driver, current_url, current_id
                 )
+                if processed >= 0:
+                    batch_processed += 1
+                    total_processed[0] += 1
+                else:
+                    batch_failed += 1
+                    total_not_processed[0] += 1
+            except Exception as e:
+                print(f"Erro ao processar produto {current_id}: {str(e)}")
+                batch_failed += 1
+                total_not_processed[0] += 1
+
+        # Relatório deste batch
+        print(
+            f"""Batch {batch_counter[0] + 1} concluído.
+            Produtos processados neste batch: {batch_processed}
+            Produtos com falha neste batch: {batch_failed}
+            Total geral processado: {total_processed[0]}
+            Total geral com falha: {total_not_processed[0]}"""
+        )
+
+        # Incrementar o contador de batches
+        batch_counter[0] += 1
+
+        # Verificar se é o último batch
+        if batch_counter[0] >= max_batches or end_idx >= len(product_pairs):
+            print("Processamento completo. Cancelando agendamento.")
+            return schedule.CancelJob
+
+    process_batch()
+
+    # Agendar os próximos batches com o intervalo especificado
+    if batch_counter[0] < max_batches and batch_counter[0] * batch_size < len(
+        product_pairs
+    ):
+        schedule.every(interval_minutes).minutes.do(process_batch)
+
+        # Loop principal para manter o programa rodando e executando os batches agendados
+        while batch_counter[0] < max_batches and batch_counter[0] * batch_size < len(
+            product_pairs
+        ):
+            try:
+                schedule.run_pending()
+                time.sleep(1)  # Verificar a cada segundo se há tarefas pendentes
+
+                if check_pending_products(supabase) == 0:
+                    print("Não há mais produtos pendentes no banco de dados.")
+                    break
+
+            except KeyboardInterrupt:
+                print("Programa interrompido pelo usuário.")
                 break
+            except Exception as e:
+                print(f"Erro no loop principal: {e}")
+                time.sleep(60)  # Continua mesmo com erros após uma pausa
 
-        except KeyboardInterrupt:
-            print("Programa interrompido pelo usuário.")
-            break
-        except Exception as e:
-            print(f"Erro no loop principal: {e}")
-            time.sleep(60)  # Continua mesmo com erros
+    return total_processed[0], total_not_processed[0]
 
 
-def run_extraction(batch_size=10, max_batches=None):
+def run_extraction(driver, url, id):
     """
-    Runs the wine data extraction process
+    Executa a extração de dados para um único produto.
 
     Args:
-        batch_size (int): Number of URLs to process in each batch
-        max_batches (int, optional): Maximum number of batches to process
-    """
-    print("Iniciando extração de dados de vinhos...")
+        driver (webdriver.Chrome): Initialized Selenium webdriver
+        url (str): URL do produto a ser extraído
+        id (str/int): ID do produto
 
-    # Initialize browser
-    driver = initialize_browser()
+    Returns:
+        int: Status do processamento (>= 0 para sucesso, < 0 para falha)
+    """
+    print(f"Iniciando extração para o produto ID {id}...")
 
     if not driver:
         print("Falha ao inicializar o navegador. Abortando.")
-        return
+        return -1
 
     try:
-        batch_count = 0
-        total_processed = 0
+        if not url:
+            print("URL inválida.")
+            return -1
 
-        while True:
-            # Get URLs to process
-            urls = extract_urls_from_database(batch_size)
-
-            if not urls:
-                print("Não há mais URLs para processar.")
-                break
-
-            print(f"Processando lote {batch_count + 1} com {len(urls)} URLs...")
-
-            # Process URLs
-            processed = process_and_upsert_wine_data(driver, urls)
-            total_processed += processed
-
-            batch_count += 1
-            print(
-                f"Lote {batch_count} concluído. Processados: {processed}. Total: {total_processed}"
-            )
-
-            if max_batches and batch_count >= max_batches:
-                print(f"Limite de {max_batches} lotes atingido.")
-                break
-
-            # Add delay between batches
-            time.sleep(1)
+        # Processar URL única
+        return process_and_upsert_wine_data(driver, url, id)
 
     except Exception as e:
-        print(f"Erro durante a extração: {str(e)}")
-
-    finally:
-        # Clean up
-        close_browser(driver)
-        print(f"Extração concluída. Total de itens processados: {total_processed}")
+        print(f"\nErro durante a extração: {str(e)}\n")
+        return -1
