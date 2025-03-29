@@ -88,17 +88,27 @@ def click_button_show_tech_details(driver):
         return False
 
 
+def escape_caractere_product_name(product_name):
+    if product_name:
+        caracteres_proibidos = ["<", ">", ":", '"', "/", "\\", "|", "?", "*"]
+        caractere_substituto = "_"
+        product_name_escaped = re.sub(
+            caracteres_proibidos,
+            caractere_substituto,
+            product_name,
+        )
+        return product_name_escaped
+
+    return None
+
+
 def baixar_imagem(driver, url, product_name):
     dest_path = r"C:/Users/victo/Documents/FIAP/Pos Tech/Módulo 3/Imagens"
     # Criar pasta de destino se não existir
     if not os.path.exists(dest_path):
         os.makedirs(dest_path)
 
-    caracteres_proibidos = ["<", ">", ":", '"', "/", "\\", "|", "?", "*"]
-    caractere_substituto = "_"
-    product_name_escaped = re.sub(
-        caracteres_proibidos,
-        caractere_substituto,
+    product_name_escaped = escape_caractere_product_name(
         product_name,
     )
 

@@ -24,7 +24,6 @@ from backend.app.core.scraper_aux import *
 from backend.app.scheduler.tasks import *
 
 
-# Initialize Supabase client
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
@@ -43,28 +42,18 @@ def scrape_wine_info_with_selenium(driver, url=EVINO_BASE_URL):
     print(f"Navegando para: {url}")
 
     try:
-        # Navigate to the URL
-        driver.get(url)
 
-        # Wait for the page to load (adjust selector based on page structure)
+        driver.get(url)
         WebDriverWait(driver, 20).until(
             EC.presence_of_element_located((By.CLASS_NAME, "BoxProductInfo__Title"))
         )
 
-        # Additional wait to ensure dynamic content is loaded
-        time.sleep(3)
-
-        # Get the page source after JS rendering
         html_content = driver.page_source
-
-        # Adicionando parte de clicks dos botoes de ver mais e mostrar tudo completo
         scroll_page(driver)
         click_button_show_tech_details(driver)
 
-        # Parse with BeautifulSoup
         soup = BeautifulSoup(html_content, "html.parser")
 
-        # Initialize dictionary for extracted data
         wine_data = {
             "product_type": None,
             "product_name": None,
@@ -76,10 +65,10 @@ def scrape_wine_info_with_selenium(driver, url=EVINO_BASE_URL):
             "scent_description": None,
             "taste_description": None,
             "harmonizes_with": None,
-            "fruit_tasting": None,  # Warning: Reavaliar para kit
-            "sugar_tasting": None,  # Warning: Reavaliar para kit
-            "acidity_tasting": None,  # Warning: Reavaliar para kit
-            "tannin_tasting": None,  # Warning: Reavaliar para kit
+            "fruit_tasting": None,
+            "sugar_tasting": None,
+            "acidity_tasting": None,
+            "tannin_tasting": None,
             "technical_sheet_wine_type": None,
             "technical_sheet_alcohol_content": None,
             "technical_sheet_volume": None,
@@ -168,7 +157,7 @@ def scrape_wine_info_with_selenium(driver, url=EVINO_BASE_URL):
                 "p", id="pairingsTablet"
             ).text.strip()
 
-        # Extract wine strength data (previously missing function)
+        # Extract wine strength data
         try:
             wine_data["fruit_tasting"] = get_strength_level(driver, "Fruta")
             wine_data["sugar_tasting"] = get_strength_level(driver, "Açúcar")
@@ -218,7 +207,6 @@ def scrape_wine_info_with_selenium(driver, url=EVINO_BASE_URL):
 
             # Extract Specialist Content
             try:
-                ...
                 specialist_content_elem = soup.find(
                     "div", class_="SpecialistOpinion__Container"
                 )
@@ -264,23 +252,7 @@ def scrape_wine_info_with_selenium(driver, url=EVINO_BASE_URL):
         return wine_data
 
     except Exception as e:
-        print(f"Erro ao processar página {url}: {str(e)}")
+        print(
+            f"Erro ao processar página {url}: TESTE AQUI DA FUNCAO SCRAPER.PY"
+        )  # {str(e)}
         return None
-
-
-# if __name__ == "__main__":
-#     # Parse command line arguments
-#     import argparse
-
-#     parser = argparse.ArgumentParser(description="Extração de dados de vinhos da Evino")
-#     parser.add_argument(
-#         "--batch-size", type=int, default=10, help="Número de URLs por lote"
-#     )
-#     parser.add_argument(
-#         "--max-batches", type=int, help="Número máximo de lotes a processar"
-#     )
-
-#     args = parser.parse_args()
-
-#     # Run extraction
-#     run_extraction(batch_size=args.batch_size, max_batches=args.max_batches)

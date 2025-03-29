@@ -26,7 +26,6 @@ def main():
     logger.info(f"Data/Hora: {datetime.datetime.now()}")
 
     try:
-        # Initialize Supabase client
         supabase = get_supabase_client()
         logger.info("Conexão com Supabase estabelecida com sucesso")
     except ValueError as e:
@@ -103,24 +102,40 @@ def main():
             default=30,
         )
 
-        logger.info(
-            f"\nAgendamento de extrações a cada {interval} minutos  para a retirada de {batch_size} produtos."
+        max_batches = get_integer_input(
+            "Digite o tamanho do batch das extrações: ",
+            min_value=1,
+            default=1,
+            max_value=10,
         )
 
-        # schedule_download_tasks(
-        #     supabase, interval_minutes=interval, batch_size=batch_size
-        # )
+        logger.info(
+            f"\nAgendamento de extrações a cada {interval} minutos  para a retirada de {batch_size} produtos por lote em {max_batches} lotes."
+        )
+
         if new_links_count:
-            pending_product_urls = get_pending_products(supabase, limit=new_links_count)
+            pending_product_data = get_pending_products(supabase, limit=new_links_count)
         else:
-            pending_product_urls = get_pending_products(supabase, limit=10)
+            pending_product_data = get_pending_products(
+                supabase, limit=batch_size * max_batches
+            )
 
-        ########################################################################
-        ########## Faltou só implementar a lógica de ciclos do scirpt  #########
-        ########## run_extraction, porém já está funcional todo o main #########
-        #########################################################################
+        # pending_product_urls = [i["url"] for i in pending_product_data]
+        # pending_product_ids = [i["id"] for i in pending_product_data]
 
-        process_and_upsert_wine_data(driver, pending_product_urls)
+        # print(f'\URLS: {pending_product_urls}\n')
+        # print(f'\nIDS: {pending_product_ids}\n')
+
+        schedule_download_tasks(
+            driver,
+            supabase,
+            pending_product_data,
+            interval_minutes=interval,
+            batch_size=batch_size,
+            max_batches=max_batches,
+        )
+
+        sys.exit(1)
 
 
 if __name__ == "__main__":
