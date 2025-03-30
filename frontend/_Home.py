@@ -45,6 +45,13 @@ with st.form("wine_form"):
         step=1,
     )
 
+    #harmonizes_with =  st.selectbox(
+     #   "Qual comida deseja harmonizar com o vinho?",
+     #   ["Carnes de caça", "Carnes vermelhas", "Pizzas", "massas de molho vermelho", "Queijos", "Pratos apimentados", "Frutos do mar", "Risoto", "massas de molho branco", "Saladas", "aperitivos", "Carnes brancas", "Sobremesas"]
+    #)
+
+
+    harmonizes_with = st.text_input(label="Qual comida deseja harmonizar com o vinho?")
     country = st.text_input(label="Qual país você gosta dos vinhos?")
     grapes = st.text_input(label="Qual uva você gosta?")
 
@@ -57,6 +64,7 @@ if submitted:
         "sugar_tasting": sugar_tasting,
         "acidity_tasting": acidity_tasting,
         "tannin_tasting": tannin_tasting,
+        "harmonizes_with": harmonizes_with,
         "country": country,
         "grapes": grapes,
     }
