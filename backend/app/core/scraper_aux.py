@@ -104,7 +104,7 @@ def escape_caractere_product_name(product_name):
 
 
 def baixar_imagem(driver, url, product_name):
-    dest_path = r"C:/Users/victo/Documents/FIAP/Pos Tech/Módulo 3/Imagens"
+    dest_path = r"C:\Users\tatia\OneDrive\Documentos\Cursos\FIAP\POS - Eng ML\Arquitetura ML e Aprendizado\Projeto\Imagens"
     # Criar pasta de destino se não existir
     if not os.path.exists(dest_path):
         os.makedirs(dest_path)
