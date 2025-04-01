@@ -88,6 +88,7 @@ def scrape_wine_info_with_selenium(driver, url=EVINO_BASE_URL):
             "specialist_review_owner": None,
             "specialist_review_occupation": None,
             "photo_url": None,
+            "product_name_escaped": None,
         }
 
         # Extract product type and name
@@ -254,13 +255,12 @@ def scrape_wine_info_with_selenium(driver, url=EVINO_BASE_URL):
             driver, url, wine_data["product_name"]
         )
         wine_data["url"] = src
+        wine_data["product_name_escaped"] = product_name_escaped
         if not src:
             logger.info(f"Erro ao processar o salvamento da foto.")
 
         return wine_data
 
     except Exception as e:
-        logger.error(
-            f"Erro ao processar página {url}: TESTE AQUI DA FUNCAO SCRAPER.PY"
-        )  # {str(e)}
+        logger.error(f"Erro ao processar página {url}: {e}")  # {str(e)}
         return None

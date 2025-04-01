@@ -19,6 +19,9 @@ from app.utils.helpers import setup_logging, get_user_input, get_integer_input
 from app.scheduler.tasks import *
 
 
+logger = logging.getLogger("evino_scraper")
+
+
 def main():
     """
     Main function to orchestrate the Evino wine scraping process.

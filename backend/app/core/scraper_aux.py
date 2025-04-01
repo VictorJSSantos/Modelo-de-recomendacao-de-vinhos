@@ -3,6 +3,7 @@ import requests
 import re
 import sys
 from selenium.webdriver.common.by import By
+import logging
 import time
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
@@ -10,7 +11,11 @@ from app.config.settings import (
     MAX_SCROLLS,
     SCROLL_DELAY,
     BUTTON_CLICK_DELAY,
+    IMAGE_PATH,
 )
+
+
+logger = logging.getLogger("evino_scraper")
 
 
 def scroll_page(driver):
@@ -104,7 +109,7 @@ def escape_caractere_product_name(product_name):
 
 
 def baixar_imagem(driver, url, product_name):
-    dest_path = r"C:\Users\tatia\OneDrive\Documentos\Cursos\FIAP\POS - Eng ML\Arquitetura ML e Aprendizado\Projeto\Imagens"
+    dest_path = IMAGE_PATH
     # Criar pasta de destino se não existir
     if not os.path.exists(dest_path):
         os.makedirs(dest_path)
@@ -132,7 +137,7 @@ def baixar_imagem(driver, url, product_name):
                 if src and src.startswith("//"):
                     src = "https:" + src + ".jpg"
 
-                nome_arquivo = f"{product_name_escaped}"
+                nome_arquivo = f"{product_name_escaped}" + ".jpg"
                 caminho_completo = os.path.join(dest_path, nome_arquivo)
                 if src:
                     resposta = requests.get(src)
