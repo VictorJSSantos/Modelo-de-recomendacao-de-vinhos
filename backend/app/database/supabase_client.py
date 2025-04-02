@@ -1,9 +1,17 @@
 import datetime
+import json
 import logging
+import os
 from supabase import create_client, Client
 
 
-from backend.app.config.settings import SUPABASE_URL, SUPABASE_KEY, EVINO_PRODUCTS_URL
+from backend.app.config.settings import (
+    SUPABASE_URL,
+    SUPABASE_KEY,
+    EVINO_PRODUCTS_URL,
+    JSON_OBJS_PATH,
+    IMAGE_PATH,
+)
 from backend.app.core.scraper_aux import *
 from backend.app.core.scraper import *
 from backend.app.utils.helpers import *
@@ -107,43 +115,43 @@ def get_pending_products(supabase: Client, limit: int = 10) -> list:
     result = (
         supabase.table("scrape_db")
         .select("id", "url")
-        .eq("scraped", 0)
+        .eq("scraped", 1)
         .limit(limit)
         .execute()
     )
     return result.data
 
 
-def update_product_html(supabase: Client, product_id: int, html_content: str) -> bool:
-    """
-    Atualiza o conteúdo HTML de um produto.
+# def update_product_html(supabase: Client, product_id: int, html_content: str) -> bool:
+#     """
+#     Atualiza o conteúdo HTML de um produto.
 
-    Args:
-        supabase (Client): Cliente do Supabase.
-        product_id (int): ID do produto.
-        html_content (str): Conteúdo HTML do produto.
+#     Args:
+#         supabase (Client): Cliente do Supabase.
+#         product_id (int): ID do produto.
+#         html_content (str): Conteúdo HTML do produto.
 
-    Returns:
-        bool: True se a atualização foi bem-sucedida, False caso contrário.
-    """
-    try:
-        now = datetime.datetime.now().isoformat()
-        result = (
-            supabase.table("scrape_db")
-            .update(
-                {
-                    "html_downloaded": 1,
-                    "html_content": html_content,
-                    "downloaded_at": now,
-                }
-            )
-            .eq("id", product_id)
-            .execute()
-        )
-        return len(result.data) > 0
-    except Exception as e:
-        logger.error(f"Erro ao atualizar produto {product_id}: {e}")
-        return False
+#     Returns:
+#         bool: True se a atualização foi bem-sucedida, False caso contrário.
+#     """
+#     try:
+#         now = datetime.datetime.now().isoformat()
+#         result = (
+#             supabase.table("scrape_db")
+#             .update(
+#                 {
+#                     "html_downloaded": 1,
+#                     "html_content": html_content,
+#                     "downloaded_at": now,
+#                 }
+#             )
+#             .eq("id", product_id)
+#             .execute()
+#         )
+#         return len(result.data) > 0
+#     except Exception as e:
+#         logger.error(f"Erro ao atualizar produto {product_id}: {e}")
+#         return False
 
 
 def get_statistics(supabase: Client) -> dict:
@@ -182,7 +190,7 @@ def check_pending_products(supabase: Client) -> int:
     Returns:
         int: Número de produtos pendentes.
     """
-    result = supabase.table("scrape_db").select("id").eq("scraped", 0).execute()
+    result = supabase.table("scrape_db").select("id").eq("scraped", 1).execute()
     return len(result.data)
 
 
@@ -273,7 +281,7 @@ def extract_urls_from_database(limit=20):
         response = (
             supabase.table("scrape_db")
             .select("id, url")
-            .eq("scraped", 0)
+            .eq("scraped", 1)
             .limit(limit)
             .execute()
         )
@@ -325,6 +333,90 @@ def process_and_upsert_wine_data(driver, url, id):
         sys.exit(1)
 
     except Exception as e:
+        update_scraped = (
+            supabase.table("scrape_db").update({"scraped": -1}).eq("id", id).execute()
+        )
+        if update_scraped.data:
+            logger.error(
+                f"Erro ao processar o ID {id}, não é possível fazer o scraping. Scraped setado em -1."
+            )
+            not_processed_count -= 1
+            return not_processed_count
+
+    return processed_count
+
+
+def process_and_upsert_wine_data_locally(driver, url, id):
+    """
+    Processes URLs and upserts the extracted data to a local JSON file
+
+    Args:
+        driver (webdriver.Chrome): Initialized Selenium webdriver
+        url (list): Url to process
+        id (int): Register ID on Supabase table
+
+    Returns:
+        int: Number of successfully processed URLs
+    """
+    processed_count = 0
+    not_processed_count = 0
+
+    try:
+        wine_data = scrape_wine_info_with_selenium(driver, url)
+
+        if wine_data:
+            wine_data["id"] = id
+
+            # Criar diretório se não existir
+            data_dir = JSON_OBJS_PATH
+            if not os.path.exists(data_dir):
+                os.makedirs(data_dir)
+
+            # Definir o caminho do arquivo
+            file_path = os.path.join(data_dir, f"wine_{id}.json")
+
+            # Flag para controlar o sucesso do salvamento
+            save_success = False
+
+            try:
+                # Salvar dados em um arquivo JSON local
+                with open(file_path, "w", encoding="utf-8") as f:
+                    json.dump(wine_data, f, ensure_ascii=False, indent=4)
+
+                # Verificar explicitamente se o arquivo foi criado e tem conteúdo
+                if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+                    save_success = True
+                else:
+                    logger.error(f"Falha ao verificar arquivo JSON criado para ID {id}")
+            except Exception as json_error:
+                logger.error(f"Erro ao salvar JSON para ID {id}: {str(json_error)}")
+
+            # Só atualiza o status se o salvamento foi bem sucedido
+            if save_success:
+                update_scraped = (
+                    supabase.table("scrape_db")
+                    .update({"scraped": 1})
+                    .eq("id", id)
+                    .execute()
+                )
+
+                if update_scraped.data:
+                    logger.info(
+                        f"Dados do vinho de ID {id} salvos localmente com sucesso"
+                    )
+                    processed_count += 1
+                    return processed_count
+                else:
+                    logger.error(f"Erro ao atualizar status no Supabase para ID {id}")
+            else:
+                logger.error(f"Arquivo JSON não foi criado corretamente para ID {id}")
+
+    except KeyboardInterrupt as e:
+        logger.info(f"Programa encerrado pelo usuário.")
+        sys.exit(1)
+
+    except Exception as e:
+        logger.error(f"Erro geral ao processar ID {id}: {str(e)}")
         update_scraped = (
             supabase.table("scrape_db").update({"scraped": -1}).eq("id", id).execute()
         )

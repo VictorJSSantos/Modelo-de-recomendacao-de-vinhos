@@ -208,7 +208,7 @@ class WineRecommender:
             raise
 
 
-# Função de conversão de DataFrame para garanir que ele terá as features necessárias
+# Função de conversão de DataFrame para garantir que ele terá as features necessárias
 # Muito provavelmente estará deprecado e não precisaremos mais devido a
 # feature engineering para garantir os inptus corretos
 def converter_dataframe(df_original):

@@ -10,6 +10,7 @@ from backend.app.database.supabase_client import (
     check_pending_products,
     extract_urls_from_database,
     process_and_upsert_wine_data,
+    process_and_upsert_wine_data_locally,
 )
 from backend.app.utils.helpers import *
 from backend.app.core.scraper_aux import *
@@ -88,7 +89,7 @@ def schedule_download_tasks(
 
             # Executar a extração para este produto
             try:
-                processed = process_and_upsert_wine_data(
+                processed = process_and_upsert_wine_data_locally(
                     driver, current_url, current_id
                 )
                 if processed >= 0:
@@ -173,7 +174,7 @@ def run_extraction(driver, url, id):
             return -1
 
         # Processar URL única
-        return process_and_upsert_wine_data(driver, url, id)
+        return process_and_upsert_wine_data_locally(driver, url, id)
 
     except Exception as e:
         logger.error(f"\nErro durante a extração: {str(e)}\n")
