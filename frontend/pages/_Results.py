@@ -36,6 +36,7 @@ recomendacoes = recommender.recommend_wines(
         "sugar_tasting": st.session_state["params"]["sugar_tasting"],
         "acidity_tasting": st.session_state["params"]["acidity_tasting"],
         "tannin_tasting": st.session_state["params"]["tannin_tasting"],
+        "harmonizes_with": st.session_state["params"]["harmonizes_with"],
         "technical_sheet_country": st.session_state["params"]["country"],
         "technical_sheet_grapes": "Uvas variadas",
     }
@@ -52,6 +53,7 @@ for index, vinho in st.session_state["wine_results"].iterrows():
     with st.container():
         st.subheader(vinho["product_name"])
         st.write(f"🍇 Uva: {vinho['technical_sheet_grapes']}")
+        st.write(f"🧀 Harmoniza Com: {vinho['harmonizes_with']}")
         st.write(f"⭐ Tipo do Vinho: {vinho['technical_sheet_wine_type']}")
         st.write(f"🌍 País: {vinho['technical_sheet_country']}")
 

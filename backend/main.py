@@ -2,7 +2,7 @@ from bs4 import BeautifulSoup
 import datetime
 import logging
 import sys
-
+import time
 
 from app.config.settings import EVINO_PRODUCTS_URL, EVINO_BASE_URL
 from app.core.browser import initialize_browser, close_browser
@@ -17,6 +17,9 @@ from app.database.supabase_client import (
 )
 from app.utils.helpers import setup_logging, get_user_input, get_integer_input
 from app.scheduler.tasks import *
+
+
+logger = logging.getLogger("evino_scraper")
 
 
 def main():
@@ -77,9 +80,7 @@ def main():
 
             except Exception as e:
                 logger.error(f"Erro durante a extração inicial: {e}")
-            # finally:
-            #     # Close the browser
-            #     close_browser(driver)
+
         else:
             logger.error(
                 "Não foi possível inicializar o navegador. Verifique se o Chrome está instalado."

@@ -4,7 +4,7 @@ import sys
 import os
 
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
 from backend.app.config.settings import (
     AWS_ACCESS_KEY_ID,
     AWS_SECRET_ACCESS_KEY,
@@ -16,13 +16,6 @@ from backend.app.config.settings import (
     IMAGE_PATH,
     JSON_OBJS_PATH,
 )
-
-# # Configurações
-# AWS_ACCESS_KEY = "sua_access_key" # Não tá habilitado para pegar as informações na aws
-# AWS_SECRET_KEY = "sua_secret_key" # Não tá habilitado para pegar as informações na aws
-# BUCKET_NAME = "evinoimgagem" # s3://evinoimgagem/imagens/
-# LOCAL_IMAGE_DIR = r"C:\Users\tatia\OneDrive\Documentos\Cursos\FIAP\POS - Eng ML\Arquitetura ML e Aprendizado\Projeto\Imagens"
-# S3_FOLDER = "imagens/"  # Pasta dentro do S3 onde as imagens serão salvas
 
 logger = logging.getLogger("evino_scraper")
 
@@ -71,6 +64,7 @@ def upload_to_s3(
 
         s3_key = f"{prefix}{file_name}" if prefix else file_name
 
+        # Verifica se o arquivo já existe no S3
         try:
             s3_client.head_object(Bucket=bucket_name, Key=s3_key)
             if skip_existing:
@@ -82,9 +76,13 @@ def upload_to_s3(
                 logger.info(
                     f"Arquivo {s3_key} já existe no bucket {bucket_name}. Substituindo..."
                 )
-        except:
-            pass
+        except s3_client.exceptions.ClientError as e:
+            # Se o erro for 404, significa que o arquivo não existe e pode ser enviado
+            if e.response["Error"]["Code"] != "404":
+                logger.error(f"Erro ao verificar existência do arquivo no S3: {str(e)}")
+                return False
 
+        # Faz o upload do arquivo
         s3_client.upload_file(file_path, bucket_name, s3_key)
         logger.info(f"{file_name} enviado com sucesso!")
         return True
@@ -94,11 +92,37 @@ def upload_to_s3(
         return False
 
 
+def upload_directory_to_s3(
+    directory_path, bucket_name, prefix="", allowed_extensions=None
+):
+    """
+    Faz upload de todos os arquivos dentro de um diretório para o Amazon S3.
+
+    Args:
+        directory_path (str): Caminho do diretório local
+        bucket_name (str): Nome do bucket do S3
+        prefix (str, opcional): Prefixo da pasta no S3
+        allowed_extensions (list, opcional): Lista de extensões permitidas
+    """
+    if not os.path.exists(directory_path):
+        logger.error(f"Erro: Diretório {directory_path} não encontrado!")
+        return
+
+    files_uploaded = 0
+    for root, _, files in os.walk(directory_path):
+        for file in files:
+            file_path = os.path.join(root, file)
+            if upload_to_s3(file_path, bucket_name, prefix, allowed_extensions):
+                files_uploaded += 1
+
+    logger.info(f"Total de arquivos enviados: {files_uploaded}")
+
+
 if __name__ == "__main__":
 
-    ans = input("Quer processar imagens para o S3? s/n")
-    if ans == "s":
-        upload_to_s3(
+    ans = input("Quer processar imagens para o S3? s/n:\t")
+    if ans.lower() == "s":
+        upload_directory_to_s3(
             IMAGE_PATH,
             RAW_BUCKET,
             IMAGES_RAW_BUCKET,
@@ -107,9 +131,9 @@ if __name__ == "__main__":
     else:
         logger.info("Processamento de imagens para o S3 não foi realizado.")
 
-    ans = input("Quer processar os arquivos JSON para o S3? s/n")
-    if ans == "s":
-        upload_to_s3(
+    ans = input("Quer processar os arquivos JSON para o S3? s/n\t")
+    if ans.lower() == "s":
+        upload_directory_to_s3(
             JSON_OBJS_PATH, RAW_BUCKET, OBJS_RAW_BUCKET, allowed_extensions=[".json"]
         )
     else:

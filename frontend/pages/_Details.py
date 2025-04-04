@@ -37,6 +37,7 @@ with col1:
 with col2:
     st.write(f"**🍇 Uva:** {vinho['technical_sheet_grapes']}")
     st.write(f"**⭐ Tipo do Vinho:** {vinho['technical_sheet_wine_type']}")
+    st.write(f"**🧀 Harmoniza Com:** {vinho['harmonizes_with']}")
     st.write(f"**🌍 País:** {vinho['technical_sheet_country']}")
     st.write(f"**🏺 Safra:** {vinho.get('technical_sheet_year', 'Não informado')}")
 

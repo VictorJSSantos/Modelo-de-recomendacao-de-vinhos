@@ -10,7 +10,7 @@ from supabase import create_client
 import sys
 import os
 import datetime
-
+from typing import Dict
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
 from backend.app.config.settings import (
@@ -29,7 +29,7 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 logger = logging.getLogger("evino_scraper")
 
 
-def scrape_wine_info_with_selenium(driver, url=EVINO_BASE_URL):
+def scrape_wine_info_with_selenium(driver, url=EVINO_BASE_URL) -> Dict | None:
     """
     Loads a wine product page with Selenium and extracts detailed information
     while the page is rendered
@@ -88,6 +88,7 @@ def scrape_wine_info_with_selenium(driver, url=EVINO_BASE_URL):
             "specialist_review_owner": None,
             "specialist_review_occupation": None,
             "photo_url": None,
+            "product_name_escaped": None,
         }
 
         # Extract product type and name
@@ -254,13 +255,12 @@ def scrape_wine_info_with_selenium(driver, url=EVINO_BASE_URL):
             driver, url, wine_data["product_name"]
         )
         wine_data["url"] = src
+        wine_data["product_name_escaped"] = product_name_escaped
         if not src:
             logger.info(f"Erro ao processar o salvamento da foto.")
 
         return wine_data
 
     except Exception as e:
-        logger.error(
-            f"Erro ao processar página {url}: TESTE AQUI DA FUNCAO SCRAPER.PY"
-        )  # {str(e)}
+        logger.error(f"Erro ao processar página {url}: {e}")  # {str(e)}
         return None
