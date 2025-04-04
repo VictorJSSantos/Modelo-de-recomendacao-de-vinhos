@@ -2,6 +2,7 @@ import joblib
 import pandas as pd
 import numpy as np
 import os
+import spacy
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import MinMaxScaler, LabelEncoder, OrdinalEncoder
@@ -86,6 +87,10 @@ class WineRecommender:
             .fillna("")
             .apply(lambda x: " ".join(x.astype(str)), axis=1)
         )
+
+        # Carregar o modelo de palavras conectivas em PT-BR
+        nlp = spacy.load("pt_core_news_sm")
+        stopwords_spacy = nlp.Defaults.stop_words
 
         # Realizamos uma Vetorização TF-IDF
         self.vectorizer = TfidfVectorizer(
