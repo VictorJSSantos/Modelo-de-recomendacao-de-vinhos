@@ -19,27 +19,15 @@ class JaccardWineEvaluator:
         self.recommender = recommender
         self.df = dataframe
 
-        self.categorical_columns = [
-            col
-            for col in [
-                "technical_sheet_wine_type",
-                "technical_sheet_region",
-                "technical_sheet_country",
-                "harmonizes_with",
-            ]
-            if col in self.df.columns
-        ]
+        # Usar as mesmas colunas definidas no recomendador
+        self.text_columns = recommender.text_columns
+        self.categorical_columns = recommender.categoric_columns
+        self.ordinal_columns = recommender.ordinal_columns
 
-        self.numeric_columns = [
-            col
-            for col in [
-                "fruit_tasting",
-                "sugar_tasting",
-                "acidity_tasting",
-                "tannin_tasting",
-            ]
-            if col in self.df.columns
-        ]
+        print(
+            f"Avaliador inicializado com {len(self.text_columns)} colunas de texto, "
+            f"{len(self.categorical_columns)} colunas categóricas e {len(self.ordinal_columns)} colunas ordinais"
+        )
 
     def _jaccard_similarity(self, wine1, wine2, weighted=True):
         """
@@ -57,68 +45,82 @@ class JaccardWineEvaluator:
         weights = {
             "technical_sheet_wine_type": 1.5,
             "technical_sheet_region": 1.2,
-            "technical_sheet_country": 0.8,
-            "harmonizes_with": 1.0,
-            "fruit_tasting": 1.0,
-            "sugar_tasting": 1.3,
-            "acidity_tasting": 1.2,
-            "tannin_tasting": 1.1,
+            "technical_sheet_country": 1.2,
+            "harmonizes_with": 1.2,
+            "fruit_tasting": 1,
+            "sugar_tasting": 1,
+            "acidity_tasting": 1,
+            "tannin_tasting": 1,
         }
 
         # Inicializar contadores
         intersection = 0
         union = 0
+        used_features = 0
+
+        # Calcular para colunas textuais
+        for col in self.text_columns:
+            if col in wine1.index and col in wine2.index:
+                if pd.notna(wine1[col]) and pd.notna(wine2[col]):
+                    weight = weights.get(col, 1.0) if weighted else 1.0
+
+                    if col == "harmonizes_with":
+                        # Comparação tokenizada para 'harmonizes_with'
+                        tokens1 = set(str(wine1[col]).lower().split(","))
+                        tokens2 = set(str(wine2[col]).lower().split(","))
+                        common_tokens = tokens1.intersection(tokens2)
+                        all_tokens = tokens1.union(tokens2)
+
+                        if all_tokens:
+                            token_ratio = len(common_tokens) / len(all_tokens)
+                            intersection += token_ratio * weight
+                            union += weight
+                            used_features += 1
+                    else:
+                        # Para outras variáveis textuais, comparação direta
+                        if str(wine1[col]).lower() == str(wine2[col]).lower():
+                            intersection += weight
+                        union += weight
+                        used_features += 1
 
         # Calcular para colunas categóricas
         for col in self.categorical_columns:
             if col in wine1.index and col in wine2.index:
-                if not pd.isna(wine1[col]) and not pd.isna(wine2[col]):
-                    # Para valores de texto, considerar parcialmente
-                    if wine1[col] == wine2[col]:
-                        if weighted:
-                            intersection += weights.get(col, 1.0)
-                        else:
-                            intersection += 1
-                    # Para harmonizes_with, checar tokens compartilhados
-                    elif col == "harmonizes_with":
-                        tokens1 = set(str(wine1[col]).lower().split(","))
-                        tokens2 = set(str(wine2[col]).lower().split(","))
+                if pd.notna(wine1[col]) and pd.notna(wine2[col]):
+                    weight = weights.get(col, 1.0) if weighted else 1.0
 
-                        common_tokens = tokens1.intersection(tokens2)
-                        if common_tokens:
-                            token_ratio = len(common_tokens) / len(
-                                tokens1.union(tokens2)
-                            )
-                            if weighted:
-                                intersection += token_ratio * weights.get(col, 1.0)
-                            else:
-                                intersection += token_ratio
+                    if str(wine1[col]).lower() == str(wine2[col]).lower():
+                        intersection += weight
+                    union += weight
+                    used_features += 1
 
-                    if weighted:
-                        union += weights.get(col, 1.0)
-                    else:
-                        union += 1
-
-        # Calcular para colunas numéricas
-        for col in self.numeric_columns:
+        # Calcular para colunas ordinais
+        for col in self.ordinal_columns:
             if col in wine1.index and col in wine2.index:
-                if not pd.isna(wine1[col]) and not pd.isna(wine2[col]):
-                    # Para valores numéricos, calcular proximidade relativa
-                    max_val = 10.0  # Assumindo escala 0-10
-                    diff = abs(float(wine1[col]) - float(wine2[col])) / max_val
-                    similarity = 1 - diff  # Normalizado entre 0-1
+                if pd.notna(wine1[col]) and pd.notna(wine2[col]):
+                    weight = weights.get(col, 1.0) if weighted else 1.0
 
-                    if weighted:
-                        intersection += similarity * weights.get(col, 1.0)
-                        union += weights.get(col, 1.0)
-                    else:
-                        intersection += similarity
-                        union += 1
+                    try:
+                        # Para valores numéricos, calcular proximidade relativa
+                        val1 = float(wine1[col])
+                        val2 = float(wine2[col])
+                        max_val = 10.0  # Assumindo escala 0-10
+                        diff = abs(val1 - val2) / max_val
+                        similarity = 1 - diff  # Normalizado entre 0-1
+
+                        intersection += similarity * weight
+                        union += weight
+                        used_features += 1
+                    except (ValueError, TypeError):
+                        # Ignorar se não conseguir converter para float
+                        pass
 
         # Calcular Jaccard
         if union == 0:
             return 0
-        return intersection / union
+
+        jaccard = intersection / union
+        return jaccard
 
     def evaluate_recommendations(self, test_size=0.2, num_tests=100, top_n=5):
         """
@@ -136,60 +138,113 @@ class JaccardWineEvaluator:
         _, test_df = train_test_split(self.df, test_size=test_size, random_state=42)
 
         # Limitar número de testes se necessário
-        test_samples = test_df.sample(min(num_tests, len(test_df)))
+        test_samples = test_df.sample(min(num_tests, len(test_df))).reset_index(
+            drop=True
+        )
+        print(f"Avaliando {len(test_samples)} amostras de teste")
 
         jaccard_scores = []
         coverage = set()
         diversidade_interna = []
+        sucessos = 0
+        erros = 0
 
-        for _, wine in test_samples.iterrows():
-            # Criar input de características
-            input_features = {}
-            for col in self.categorical_columns + self.numeric_columns:
-                if pd.notna(wine[col]):
-                    input_features[col] = wine[col]
+        for idx, wine in test_samples.iterrows():
+            try:
+                # Criar input de características
+                input_features = {}
 
-            # Obter recomendações
-            recomendacoes = self.recommender.recommend_wines(
-                input_features, top_n=top_n
-            )
+                # Incluir características de texto
+                for col in self.text_columns:
+                    if pd.notna(wine[col]):
+                        input_features[col] = wine[col]
 
-            # Adicionar à cobertura
-            coverage.update(recomendacoes)
+                # Incluir características categóricas
+                for col in self.categorical_columns:
+                    if pd.notna(wine[col]):
+                        input_features[col] = wine[col]
 
-            # Calcular jaccard médio entre vinho base e recomendações
-            jacc_scores = []
-            for rec_id in recomendacoes:
-                rec_wine = self.df[self.df["id"] == rec_id].iloc[0]
-                jacc = self._jaccard_similarity(wine, rec_wine)
-                jacc_scores.append(jacc)
+                # Incluir características ordinais
+                for col in self.ordinal_columns:
+                    if pd.notna(wine[col]):
+                        input_features[col] = wine[col]
 
-            # Adicionar à lista geral
-            if jacc_scores:
-                jaccard_scores.append(np.mean(jacc_scores))
+                # Verificar se há características suficientes
+                if len(input_features) == 0:
+                    print(f"Amostra {idx} não tem características suficientes")
+                    continue
 
-            # Calcular diversidade interna das recomendações
-            if len(recomendacoes) > 1:
-                internal_scores = []
-                for i, rec_id1 in enumerate(recomendacoes):
-                    for rec_id2 in recomendacoes[i + 1 :]:
-                        rec_wine1 = self.df[self.df["id"] == rec_id1].iloc[0]
-                        rec_wine2 = self.df[self.df["id"] == rec_id2].iloc[0]
-                        sim = self._jaccard_similarity(rec_wine1, rec_wine2)
-                        internal_scores.append(sim)
+                # Obter recomendações
+                recomendacoes = self.recommender.recommend_wines(
+                    input_features, top_n=top_n
+                )
 
-                # Diversidade = 1 - similaridade média interna
-                if internal_scores:
-                    diversidade_interna.append(1 - np.mean(internal_scores))
+                if not recomendacoes:
+                    print(f"Sem recomendações para amostra {idx}")
+                    continue
+
+                # Adicionar à cobertura
+                coverage.update(recomendacoes)
+
+                # Calcular jaccard médio entre vinho base e recomendações
+                jacc_scores = []
+                for rec_id in recomendacoes:
+                    rec_wine_df = self.df[self.df["id"] == rec_id]
+                    if len(rec_wine_df) == 0:
+                        print(f"ID de vinho não encontrado: {rec_id}")
+                        continue
+
+                    rec_wine = rec_wine_df.iloc[0]
+                    jacc = self._jaccard_similarity(wine, rec_wine)
+                    jacc_scores.append(jacc)
+
+                # Adicionar à lista geral
+                if jacc_scores:
+                    jaccard_scores.append(np.mean(jacc_scores))
+                    sucessos += 1
+
+                    if idx % 20 == 0:  # Mostrar progresso
+                        print(
+                            f"Amostra {idx}: Jaccard médio = {np.mean(jacc_scores):.4f}"
+                        )
+
+                # Calcular diversidade interna das recomendações
+                if len(recomendacoes) > 1:
+                    internal_scores = []
+                    for i, rec_id1 in enumerate(recomendacoes):
+                        rec_wine1_df = self.df[self.df["id"] == rec_id1]
+                        if len(rec_wine1_df) == 0:
+                            continue
+
+                        for rec_id2 in recomendacoes[i + 1 :]:
+                            rec_wine2_df = self.df[self.df["id"] == rec_id2]
+                            if len(rec_wine2_df) == 0:
+                                continue
+
+                            sim = self._jaccard_similarity(
+                                rec_wine1_df.iloc[0], rec_wine2_df.iloc[0]
+                            )
+                            internal_scores.append(sim)
+
+                    # Diversidade = 1 - similaridade média interna
+                    if internal_scores:
+                        diversidade_interna.append(1 - np.mean(internal_scores))
+            except Exception as e:
+                print(f"Erro na amostra {idx}: {e}")
+                erros += 1
+
+        print(f"Avaliação concluída: {sucessos} sucessos, {erros} erros")
 
         # Calcular métricas agregadas
         resultados = {
             "jaccard_médio": np.mean(jaccard_scores) if jaccard_scores else 0,
             "jaccard_desvio": np.std(jaccard_scores) if jaccard_scores else 0,
-            "cobertura": len(coverage) / len(self.df),
+            "cobertura": len(coverage) / len(self.df) if len(self.df) > 0 else 0,
             "diversidade_interna": (
                 np.mean(diversidade_interna) if diversidade_interna else 0
             ),
+            "amostras_avaliadas": sucessos,
+            "total_amostras": len(test_samples),
         }
 
         return resultados
@@ -222,41 +277,51 @@ class JaccardWineEvaluator:
             amostra_teste = vinhos_tipo.sample(min(20, len(vinhos_tipo)))
 
             jaccard_scores = []
+            sucessos = 0
 
             for _, wine in amostra_teste.iterrows():
-                # Criar input de características
-                input_features = {}
-                for col in self.categorical_columns + self.numeric_columns:
-                    if pd.notna(wine[col]):
-                        input_features[col] = wine[col]
+                try:
+                    # Criar input de características
+                    input_features = {}
 
-                # Obter recomendações
-                recomendacoes = self.recommender.recommend_wines(
-                    input_features, top_n=5
-                )
+                    # Incluir todas as características disponíveis
+                    for col in (
+                        self.text_columns
+                        + self.categorical_columns
+                        + self.ordinal_columns
+                    ):
+                        if pd.notna(wine[col]):
+                            input_features[col] = wine[col]
 
-                # Calcular jaccard médio
-                jacc_scores = []
-                for rec_id in recomendacoes:
-                    rec_wine = self.df[self.df["id"] == rec_id].iloc[0]
-                    jacc = self._jaccard_similarity(wine, rec_wine)
-                    jacc_scores.append(jacc)
+                    # Obter recomendações
+                    recomendacoes = self.recommender.recommend_wines(
+                        input_features, top_n=5
+                    )
 
-                if jacc_scores:
-                    jaccard_scores.append(np.mean(jacc_scores))
+                    if not recomendacoes:
+                        continue
+
+                    # Calcular jaccard médio
+                    jacc_scores = []
+                    for rec_id in recomendacoes:
+                        rec_wine_df = self.df[self.df["id"] == rec_id]
+                        if len(rec_wine_df) == 0:
+                            continue
+
+                        jacc = self._jaccard_similarity(wine, rec_wine_df.iloc[0])
+                        jacc_scores.append(jacc)
+
+                    if jacc_scores:
+                        jaccard_scores.append(np.mean(jacc_scores))
+                        sucessos += 1
+                except Exception as e:
+                    print(f"Erro na avaliação por tipo {tipo}: {e}")
 
             # Adicionar resultados para o tipo
             resultados_por_tipo[tipo] = {
                 "jaccard_médio": np.mean(jaccard_scores) if jaccard_scores else 0,
-                "número_amostras": len(amostra_teste),
+                "número_amostras": sucessos,
+                "total_amostras": len(amostra_teste),
             }
 
         return resultados_por_tipo
-
-
-# Exemplo de uso:
-# evaluator = JaccardWineEvaluator(wine_recommender, wine_dataframe)
-# results = evaluator.evaluate_recommendations(num_tests=50)
-# print(f"Jaccard Médio: {results['jaccard_médio']:.3f}")
-# print(f"Cobertura: {results['cobertura']:.2%}")
-# print(f"Diversidade Interna: {results['diversidade_interna']:.3f}")

@@ -10,7 +10,7 @@ from supabase import create_client
 import sys
 import os
 import datetime
-
+from typing import Dict
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
 from backend.app.config.settings import (
@@ -29,7 +29,7 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 logger = logging.getLogger("evino_scraper")
 
 
-def scrape_wine_info_with_selenium(driver, url=EVINO_BASE_URL):
+def scrape_wine_info_with_selenium(driver, url=EVINO_BASE_URL) -> Dict | None:
     """
     Loads a wine product page with Selenium and extracts detailed information
     while the page is rendered

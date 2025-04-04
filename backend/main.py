@@ -59,12 +59,7 @@ def main():
             try:
                 # Navigate to products page and get page source
                 driver.get(EVINO_PRODUCTS_URL)
-                # Aguarda 10 segundos para garantir que a página carregue completamente
-                time.sleep(10)
                 scroll_page(driver)  # Scroll to load more products
-                # Aguarda 10 segundos para garantir o carregamento dos novos produtos
-                time.sleep(10)
-
                 page_source = driver.page_source
                 soup = BeautifulSoup(page_source, "html.parser")
 
@@ -85,9 +80,7 @@ def main():
 
             except Exception as e:
                 logger.error(f"Erro durante a extração inicial: {e}")
-            # finally:
-            #     # Close the browser
-            #     close_browser(driver)
+
         else:
             logger.error(
                 "Não foi possível inicializar o navegador. Verifique se o Chrome está instalado."
