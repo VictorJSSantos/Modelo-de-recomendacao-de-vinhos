@@ -29,7 +29,7 @@ Essa etapa foi de longe a mais interessante, principalmente pelo modelo que dese
 No frontend utilizamos Streamlit para fazer as páginas, que são três: Pesquisa, Resultado e Detalhes. Respectivamente, a primeira página é a de pesquisa, onde o usuário fornece os inputs que quer pra recomendarmos os vinhos com base nesses inputs, ao submeter os inputs vamos para a página de Resultados e 5 vinhos são recomendados. Por último podemos clicar em um dos 5 vinhos e acessar mais informações sobre ele.
 
 ## Project Directory
-
+```text
 ./
 ├── .env
 ├── .gitignore
@@ -63,6 +63,7 @@ No frontend utilizamos Streamlit para fazer as páginas, que são três: Pesquis
 ├── model/
 │   ├── wine_recommender_model.pkl
 ├── wine_data/
+```
 
 O backend tem toda a parte de webscraping, comuicação com banco de dados e o modelo de recomendação;
 O frontend tem toda a lógica das páginas do streamlit;
